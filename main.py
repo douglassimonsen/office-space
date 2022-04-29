@@ -2,6 +2,7 @@ import requests
 import json
 from pprint import pprint
 import base64
+import utilities
 env  = json.load(open('env.json'))
 
 
@@ -52,21 +53,94 @@ def get_bookings(seat_ids, s):
             }
         }
     ).json()
-    json.dump(bookings, open('bookings.json', 'w'), indent=4)
+    # json.dump(bookings, open('bookings.json', 'w'), indent=4)
     return bookings
 
 
+def update_dimension(table, data):
+    data = data['filters']
+    with utilities.get_conn() as conn:
+        cursor = conn.cursor()
+        for d in data:
+            cursor.execute(
+                f"insert into spaceiq.{table} (idx, name) values (%(value)s, %(displayName)s) on conflict do nothing", 
+                d
+            )
+        conn.commit()
+
+
+def update_seats(data):
+    with utilities.get_conn() as conn:
+        cursor = conn.cursor()
+        for d in data:
+            update_single_dimension("space_types", d['spaceType'], cursor)
+            d['spaceType'] = d['spaceType']['id']
+            cursor.execute(
+                "insert into spaceiq.spaces values (%(id)s, %(spaceType)s, %(w)s, %(x)s, %(y)s, %(name)s) on conflict do nothing",
+                d
+            )
+        conn.commit()
+
+
+def update_single_dimension(table, data, cursor, columns=['id', 'name']):
+    columns = ", ".join(f"%({x})s" for x in columns)
+    cursor.execute(
+        f"insert into spaceiq.{table} values ({columns}) on conflict do nothing", 
+        data
+    )
+
+
+def update_booking_schedule(data, cursor):
+    cursor.execute("""
+    insert into spaceiq.booking_schedules (employee, space, start_dt, end_dt, schedule_type) 
+    values (%(employee)s, %(space)s, %(effectiveStartDate)s, %(effectiveEndDate)s, %(recurrencePattern)s)
+    on conflict do nothing
+    returning idx
+    """, data)
+    ret = cursor.fetchone()
+    if ret is None:
+        cursor.execute("""select idx from spaceiq.booking_schedules
+        where employee = %(employee)s
+        and space = %(space)s
+        and start_dt = %(effectiveStartDate)s
+        and end_dt = %(effectiveEndDate)s
+        and schedule_type = %(recurrencePattern)s
+        """, data)
+        return cursor.fetchone()[0]
+    else:
+        return ret[0]
+
+
+def parse_bookings(bookings):
+    with utilities.get_conn() as conn:
+        cursor = conn.cursor()
+        for d in bookings:
+            for b in d['bookings']:
+                update_single_dimension("departments", b['employee']['department'], cursor)
+                for c in ['department', 'dept']:
+                    b['employee'][c] = b['employee'][c]['id']
+                update_single_dimension("employees", b['employee'], cursor, columns=['id', 'name', 'email', 'dept', 'department'])
+                for c in ['employee', 'space']:
+                    b[c] = b[c]['id']
+                if b['bookingSchedule'] is not None:
+                    b['bookingSchedule']['employee'] = b['employee']
+                    b['bookingSchedule']['space'] = b['space']
+                    b['bookingSchedule'] = update_booking_schedule(b['bookingSchedule'], cursor)
+                update_single_dimension("bookings", b, cursor, columns=['id', 'employee', 'startDate', 'endDate', 'passedHealthCheck', 'checkedIn', 'autoReleasedAt', 'bookingSchedule', 'space'])
+        conn.commit()
+
+
 def main():
-    data, session = get_data()
-    json.dump(data, open("data.json", "w"), indent=4)
-    seats = seat_list(data)
-    get_bookings([s['id'] for s in seats], session)
+    # data, session = get_data()
+    data = json.load(open("data.json"))
+    dimensions = data['data']['viewer']['viewFilters']
+    update_dimension('regions', dimensions[1])
+    update_seats(data['data']['node']['spaces'])
+    # json.dump(data, open("data.json", "w"), indent=4)
+    # seats = seat_list(data)
+    # get_bookings([s['id'] for s in seats], session)
     data = json.load(open('bookings.json'))['data']['nodes']
-    for d in data:
-        for b in d['bookings']:
-            if b['bookingSchedule'] is not None:
-                pprint(b)
-                exit()
+    parse_bookings(data)
 
 
 if __name__ == '__main__':
