@@ -2,7 +2,8 @@ drop schema if exists spaceiq cascade;
 create schema spaceiq;
 create table spaceiq.space_types (
   idx text primary key,
-  name text
+  name text,
+  upload_dt timestamp default current_timestamp
 );
 create table spaceiq.spaces (
   idx text primary key,
@@ -10,22 +11,26 @@ create table spaceiq.spaces (
   width int,
   x int,
   y int,
-  name text
+  name text,
+  upload_dt timestamp default current_timestamp
 );
 create table spaceiq.departments (
   idx text primary key,
-  name text
+  name text,
+  upload_dt timestamp default current_timestamp
 );
 create table spaceiq.regions (
   idx text primary key,
-  name text
+  name text,
+  upload_dt timestamp default current_timestamp
 );
 create table spaceiq.employees (
   idx text primary key,
-    name text,
-    email text,
-    region text references spaceiq.regions(idx),
-    department text references spaceiq.departments(idx)
+  name text,
+  email text,
+  region text references spaceiq.regions(idx),
+  department text references spaceiq.departments(idx),
+  upload_dt timestamp default current_timestamp 
 );
 create table spaceiq.booking_schedules (
   idx serial primary key,
@@ -34,7 +39,8 @@ create table spaceiq.booking_schedules (
   start_dt timestamp,
   end_dt timestamp,
   schedule_type text,
-  unique (employee, space, start_dt, end_dt, schedule_type)
+  unique (employee, space, start_dt, end_dt, schedule_type),
+  upload_dt timestamp default current_timestamp
 );
 create table spaceiq.bookings (
   idx text primary key,
@@ -45,5 +51,6 @@ create table spaceiq.bookings (
   checked_in boolean,
   auto_released_at timestamp,
   part_of_schedule int references spaceiq.booking_schedules(idx),
-  space text references spaceiq.spaces(idx)
+  space text references spaceiq.spaces(idx),
+  upload_dt timestamp default current_timestamp
 );

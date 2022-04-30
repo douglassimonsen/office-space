@@ -35,8 +35,7 @@ def seat_list(data):
             "w": x['w'],
             'x': x['x'],
             'y': x['y'],
-            'code': x['code'],
-            'displayName': x['spaceType']['displayName'],
+            'displayName': x['code'],
         } 
         for x in data['data']['node']['spaces']
     ]
@@ -53,7 +52,6 @@ def get_bookings(seat_ids, s):
             }
         }
     ).json()
-    # json.dump(bookings, open('bookings.json', 'w'), indent=4)
     return bookings
 
 
@@ -131,16 +129,13 @@ def parse_bookings(bookings):
 
 
 def main():
-    # data, session = get_data()
-    data = json.load(open("data.json"))
+    data, session = get_data()
     dimensions = data['data']['viewer']['viewFilters']
     update_dimension('regions', dimensions[1])
     update_seats(data['data']['node']['spaces'])
-    # json.dump(data, open("data.json", "w"), indent=4)
-    # seats = seat_list(data)
-    # get_bookings([s['id'] for s in seats], session)
-    data = json.load(open('bookings.json'))['data']['nodes']
-    parse_bookings(data)
+    seats = seat_list(data)
+    bookings = get_bookings([s['id'] for s in seats], session)
+    parse_bookings(bookings['data']['nodes'])
 
 
 if __name__ == '__main__':
